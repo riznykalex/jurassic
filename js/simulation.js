@@ -1,4 +1,4 @@
-// js/simulation.js
+﻿// js/simulation.js
 import { SPECIES, BALANCE, WIDTH, HEIGHT } from './config.js';
 import { dist, clamp, GRASS_SYMBOLS } from './utils.js';
 import { EventBus, EVENTS } from './events.js';
