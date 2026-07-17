@@ -134,7 +134,7 @@ function syncBalls() {
     if (!cfg.spriteFile) {
       entry.ball.style.width = size + 'px';
       entry.ball.style.height = size + 'px';
-      entry.ball.style.borderColor = b.isResting ? '#333' : '#111';
+      entry.ball.style.borderColor = (!b.isMoving && !b.manualTarget) ? '#333' : '#111';
     }
 
 // Визначаємо РЕАЛЬНУ фізичну швидкість
@@ -155,13 +155,9 @@ function syncBalls() {
         rawState = dd < bite ? 'attack' : (actualSpeed > IS_MOVING_THRESHOLD ? 'walk' : 'idle');
       }
     } 
-    // Пріоритет №2: Відпочинок
-    // Відпочинок і простий стан використовуємо як один idle, щоб юніт
-    // не перемикався на окремий "rest"-стан і не втрачав єдину анімацію.
-    else if (b.isResting) {
-      rawState = 'idle';
-    } 
-    // Пріоритет №3: Ходьба (тільки якщо швидкість суттєва)
+    // Пріоритет №2: Ходьба (тільки якщо швидкість суттєва) - колишній
+    // окремий стан "відпочинок" більше не існує: юніт або йде, або idle,
+    // і в idle він і так відновлюється (регенерація в moveBall).
     else if ((b.isMoving || b.manualTarget !== null) && actualSpeed > IS_MOVING_THRESHOLD) {
       rawState = 'walk';
     } 
