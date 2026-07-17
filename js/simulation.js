@@ -49,7 +49,6 @@ function makeBall(type, x, y) {
     energy: cfg.baseEnergy,
     vx: 0, vy: 0,
     isMoving: false,
-    isResting: false,
     manualTarget: null,
     manualUntil: 0,
     attackTargetId: null,
@@ -186,7 +185,6 @@ function resolveStructureCollisions(unit) {
       unit.vx = 0;
       unit.vy = 0;
       unit.isMoving = false;
-      unit.isResting = false;
       pushed = true;
     }
   }
@@ -267,7 +265,6 @@ function queueAction(ids, action) {
     if (!ball || !ball.alive || !SPECIES[ball.type].playerControllable) return;
 
     ball.attackTargetId = null;
-    ball.isResting = false;
 
     if (action.type === 'drop_food' || action.type === 'build') {
       ball.pendingAction = { ...action };
@@ -299,16 +296,10 @@ function queueAction(ids, action) {
 
   function applyLevelUps(ball, now) {
     // Прокачка (перетворення накопиченого XP на рівень + повне зцілення)
-    // відбувається лише коли юніт у безпеці: відпочиває, або бою не було
-    // певний час. Інакше виходило дивно - юніта б'ють, а він просто посеред
-    // сутички миттєво стрибає рівнем і повністю зцілюється від того ж удару.
-    // Прокачка (перетворення накопиченого XP на рівень + повне зцілення)
-    // відбувається лише коли бою реально не було певний час. isResting НЕ
-    // рахується як самостійна гарантія безпеки - юніт може "відпочивати"
-    // (за прапорцем) і водночас далі отримувати укуси впритул від нападника,
-    // який просто стоїть поруч; кожен такий укус все одно оновлює
-    // lastCombatAt, тож перевірка нижче коректно блокує прокачку, поки бій
-    // справді триває, незалежно від isResting.
+    // відбувається лише коли бою реально не було певний час - не досить
+    // просто "стояти", бо юніт може стояти й водночас далі отримувати удари
+    // впритул від нападника поруч. Кожен такий удар оновлює lastCombatAt,
+    // тож перевірка нижче коректно блокує прокачку, поки бій справді триває.
     const safe = (now - ball.lastCombatAt > BALANCE.LEVEL_UP_SAFE_DELAY_MS);
     if (!safe) return;
     let cost = BALANCE.XP_LEVEL_UP_COST * ball.level;
@@ -518,14 +509,12 @@ function queueAction(ids, action) {
   }
 
   function setManualTarget(ball, x, y) {
-    ball.isResting = false; // команда гравця має пріоритет над пасивним відпочинком
     ball.attackTargetId = null; // звичайна команда руху скасовує попередній наказ атаки
     ball.manualTarget = { x, y };
     ball.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
   }
 
   function setAttackTarget(ball, targetId) {
-    ball.isResting = false;
     ball.manualTarget = null;
     ball.manualUntil = 0; // щоб decideBehaviour виконувався щотіку й переслідував ціль
     ball.attackTargetId = targetId;
@@ -593,12 +582,44 @@ function selectBallsInRect(x1, y1, x2, y2) {
   function decideBehaviour(unit, dt) {
     if (performance.now() < unit.knockbackUntil) return; // юніт летить від удару - нічого не вирішує
 
+    const cfg = SPECIES[unit.type];
+    const { cx, cy } = ballCenter(unit);
+    const myEnergyFrac = unit.energy / maxEnergy(unit);
+
+    // Колишні окремі стани idle/rest об'єднані в один: юніт просто "стоїть"
+    // (isMoving=false, немає manualTarget) і завдяки цьому вже відновлює
+    // energy (регенерація тепер у moveBall відбувається завжди в стані
+    // спокою, не лише в спеціальному "режимі відпочинку"). Тут лишається
+    // тільки поведінкове питання - ЧИ ВАРТО йому знову рухатись, поки energy
+    // ще не набрала RESUME_THRESHOLD. Відповідь: ні, окрім реальної загрози.
+    if (!unit.isMoving && !unit.manualTarget && myEnergyFrac < BALANCE.RESUME_THRESHOLD) {
+      let nearest = null, nd = Infinity;
+      for (const o of balls) {
+        if (o === unit || !o.alive) continue;
+        // Загроза - лише те, що дійсно сильніше (той самий критерій, що й
+        // нижче в "не агресивних"). Раніше рахувався просто "найближчий
+        // будь-хто" без фільтра - на людній карті поруч ЗАВЖДИ щось є, тож
+        // відновлення переривалось одразу, ще до реального ефекту.
+        const threatScore = maxEnergy(o) * o.level - maxEnergy(unit) * unit.level;
+        if (threatScore <= 0.5) continue;
+        const oc = ballCenter(o);
+        const dd = dist(cx, cy, oc.cx, oc.cy);
+        if (dd < nd) { nd = dd; nearest = o; }
+      }
+      if (!(nearest && nd < cfg.visionDanger)) {
+        return; // немає реальної загрози - спокійно стоїмо й відновлюємось
+      }
+      // інакше - є загроза, падаємо далі в звичайну логіку (нижче є критична втеча)
+    }
+
     // Якщо є незавершена дія (зараз - лише destroy, бо build/drop_food
     // виконуються миттєво), але шлях до неї перервався (напр. по дорозі
-    // довелось зупинитись на відпочинок - REST_THRESHOLD скидає
-    // manualTarget) - відновлюємо рух до тієї ж цілі, інакше pendingAction
-    // висить назавжди, а юніт стоїть істуканом.
-    if (unit.pendingAction && !unit.manualTarget && !unit.isResting && performance.now() >= unit.manualUntil) {
+    // довелось зупинитись відновити сили - REST_THRESHOLD скидає
+    // manualTarget) - відновлюємо рух до тієї ж цілі, коли energy вже
+    // достатня (інакше pendingAction висіла б назавжди; а без гейту по
+    // energy юніт миттєво знову впирався б у REST_THRESHOLD і смикався
+    // туди-сюди).
+    if (unit.pendingAction && !unit.manualTarget && myEnergyFrac >= BALANCE.RESUME_THRESHOLD && performance.now() >= unit.manualUntil) {
       const action = unit.pendingAction;
       let target = null;
       if (action.type === 'destroy') {
@@ -610,7 +631,6 @@ function selectBallsInRect(x1, y1, x2, y2) {
       if (target) {
         unit.manualTarget = target;
         unit.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
-        unit.isResting = false;
       } else {
         unit.pendingAction = null; // ціль зникла (камінь уже хтось зруйнував)
       }
@@ -618,37 +638,6 @@ function selectBallsInRect(x1, y1, x2, y2) {
     }
 
     if ((unit.manualTarget || performance.now() < unit.manualUntil) && !unit.attackTargetId) return;
-    const cfg = SPECIES[unit.type];
-    const { cx, cy } = ballCenter(unit);
-    const myEnergyFrac = unit.energy / maxEnergy(unit);
-
-    // Відпочинок: юніт "озирається навколо" замість того, щоб бігати до
-    // виснаження. Продовжує відпочивати, доки не набере RESUME_THRESHOLD,
-    // АЛЕ негайно перериває відпочинок і тікає, якщо поруч з'явилась загроза.
-    if (unit.isResting) {
-      if (myEnergyFrac >= BALANCE.RESUME_THRESHOLD) {
-        unit.isResting = false; // відновився, можна рухатись далі
-      } else {
-        // Незалежно від того, наскільки критично мало сил лишилось - юніт
-        // продовжує відпочивати, доки поруч немає РЕАЛЬНОЇ загрози. Раніше
-        // сама по собі критично низька energy перебивала відпочинок ("не
-        // можна просто чекати") - а саме тоді відновлення й потрібне
-        // найбільше: юніт тікав і спалював останні сили, тут-таки знову
-        // падав у відпочинок, і так по колу, ніколи фактично не відновлюючись.
-        let nearest = null, nd = Infinity;
-        for (const o of balls) {
-          if (o === unit || !o.alive) continue;
-          const oc = ballCenter(o);
-          const dd = dist(cx, cy, oc.cx, oc.cy);
-          if (dd < nd) { nd = dd; nearest = o; }
-        }
-        if (nearest && nd < cfg.visionDanger) {
-          unit.isResting = false; // загроза поруч - перериваємо відпочинок
-        } else {
-          return; // спокійно відпочиваємо далі
-        }
-      }
-    }
 
     // 1. Критична втеча (універсальна, при малому запасі енергії) -
     //    тікає геть від НАЙБЛИЖЧОГО живого об'єкта, незалежно від виду.
@@ -888,10 +877,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
       unit.x = clamp(unit.x + unit.vx * dt, 0, WIDTH - s);
       unit.y = clamp(unit.y + unit.vy * dt, 0, HEIGHT - s);
       resolveStructureCollisions(unit); // інакше сильний удар міг прокинути юніта наскрізь крізь стіну каменів
-      unit.isMoving = true;  // щоб рендерер показав анімацію руху
-      unit.isResting = false; // інакше isResting (перевіряється раніше за рух у
-                               // renderer.js) все одно малював би заморожений
-                               // кадр, хоча юніт фізично летить від удару
+      unit.isMoving = true;  // щоб рендерер показав анімацію руху, не заморожений idle-кадр
       return;
     }
 
@@ -906,16 +892,19 @@ function selectBallsInRect(x1, y1, x2, y2) {
       }
     }
 
-    if (unit.isResting) {
-      // Відновлення energy тепер витрачає накопичену value (запас їжі), а не
-      // з'являється безкоштовно - ситий юніт відновлюється, голодний застрягає
-      // на низькій energy навіть у "відпочинку".
+    // Idle-регенерація: колишні окремі стани idle/rest об'єднані в один.
+    // Юніт, що зараз просто стоїть (немає manualTarget і не рухається),
+    // відновлює energy за рахунок накопиченої value - так само витрачаючи
+    // запас їжі, а не отримуючи energy "з повітря". Голодний (value<=0)
+    // просто не отримає regenAmount>0, і застрягне на низькій energy.
+    if (!unit.manualTarget && !unit.isMoving) {
       const need = Math.max(0, maxEnergy(unit) - unit.energy);
       const regenAmount = Math.min(BALANCE.SLEEP_REGEN * dt * 60, need, unit.value);
-      unit.energy += regenAmount;
-      unit.value -= regenAmount;
-      _checkNumeric('value after regen', unit.value, unit);
-      return; // не рухається; decideBehaviour сам вирішить, коли відновити рух
+      if (regenAmount > 0) {
+        unit.energy += regenAmount;
+        unit.value -= regenAmount;
+        _checkNumeric('value after regen', unit.value, unit);
+      }
     }
     if (unit.manualTarget) {
       const { cx, cy } = ballCenter(unit);
@@ -952,10 +941,11 @@ function selectBallsInRect(x1, y1, x2, y2) {
       const s = ballSize(unit);
       if (unit.energy <= maxEnergy(unit) * BALANCE.REST_THRESHOLD) {
         unit.energy = Math.max(0.05, unit.energy);
-        unit.isResting = true; unit.manualTarget = null; unit.manualUntil = 0; unit.isMoving = false;
+        unit.manualTarget = null; unit.manualUntil = 0; unit.isMoving = false;
         unit.vx = 0; unit.vy = 0; // без цього стара швидкість "застрягала" в юніті і
-        // рендерер міг сприймати вже нерухомого (isResting) юніта як такого, що йде -
-        // анімація "заморожувалась" (rest = статичний кадр), а стан вважався walk.
+        // рендерер міг сприймати вже нерухомого юніта як такого, що йде -
+        // анімація "заморожувалась" на walk-кадрі. isMoving=false тепер сам
+        // по собі вмикає idle-регенерацію на наступному тіку (гілка вище).
       }
       const preClampX = unit.x, preClampY = unit.y;
       unit.x = clamp(unit.x, 0, WIDTH - s);
