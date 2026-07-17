@@ -63,7 +63,7 @@ export const SPECIES = {
 
 export const BALANCE = {
   ENERGY_PER_PIXEL: 0.0022,
-  SPEED_MULTIPLIER: 0.2,       // загальне сповільнення - щоб анімація встигала показатись
+  SPEED_MULTIPLIER: 0.4,       // загальне сповільнення - щоб анімація встигала показатись
   SLEEP_REGEN: 0.012,
   STARVATION_DRAIN: 0.05,      // energy/сек, яку юніт БЕЗ запасу їжі (value<=0) втрачає навіть у спокої
   MANUAL_LOCK_MS: 2500,
