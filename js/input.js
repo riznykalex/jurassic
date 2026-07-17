@@ -68,7 +68,9 @@ export function initInput() {
 
     const selectedIds = Array.from(SimulationEngine.getSelectedIds());
     const ids = selectedIds.length ? selectedIds : (unit ? [unit.id] : []);
-    const canBuild = getBuildableUnitIds(ids).length > 0;
+    // build і destroy навмисно ділять один кошт (DESTROY_COST === BUILD_COST
+    // у simulation.js) - тому одна й та сама перевірка коректно описує обидві кнопки.
+    const canAffordStoneAction = getBuildableUnitIds(ids).length > 0;
     const canDropFood = getDropFoodableUnitIds(ids).length > 0;
 
     contextMenu.innerHTML = `
@@ -82,19 +84,19 @@ export function initInput() {
 
     const buildButton = contextMenu.querySelector('[data-action="build"]');
     if (buildButton) {
-      buildButton.disabled = !canBuild;
-      buildButton.title = canBuild ? 'Побудувати камінь' : 'Недостатньо їжі';
+      buildButton.disabled = !canAffordStoneAction;
+      buildButton.title = canAffordStoneAction ? 'Побудувати камінь' : 'Недостатньо їжі';
       buildButton.style.backgroundImage = "url('./assets/stones.png')";
       buildButton.style.backgroundRepeat = 'no-repeat';
-      buildButton.style.backgroundSize = '384px 64px';
+      buildButton.style.backgroundSize = '168px 28px';
       buildButton.style.backgroundPosition = '0px 0px';
       buildButton.style.imageRendering = 'pixelated';
     }
 
     const destroyButton = contextMenu.querySelector('[data-action="destroy"]');
     if (destroyButton) {
-      destroyButton.disabled = !canBuild;
-      destroyButton.title = canBuild ? 'Розбити камінь' : 'Недостатньо їжі';
+      destroyButton.disabled = !canAffordStoneAction;
+      destroyButton.title = canAffordStoneAction ? 'Розбити камінь' : 'Недостатньо їжі';
     }
 
     const dropButton = contextMenu.querySelector('[data-action="drop"]');

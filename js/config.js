@@ -25,12 +25,9 @@ export const SPECIES = {
   },
   dino_predator: {
     label: 'Хижий динозавр', color: '#e74c3c', diet: 'carnivore', cap: 4, spawnChance: 0.0015,
-    baseEnergy: 9, maxEnergyBase: 14, speed: 100, sizeBase: 48, trophicWeight: 3,
+    baseEnergy: 7, maxEnergyBase: 10, speed: 90, sizeBase: 48, trophicWeight: 3,
     visionDanger: 0, visionFood: 200, visionPrey: 260, spriteFile: 'assets/trex_4x3.png',
-    aggressive: false, playerControllable: false, rare: true, // полює поодинці - тому й немає бонусу
-    // зграї (packAttackFactor), а типова здобич (мамонт/носоріг) уже сама
-    // добре відбивається - тож апекс-хижак мусить мати запас energy, що
-    // реально перевищує здобич, а не поступається їй
+    aggressive: false, playerControllable: false, rare: true, // полює поодинці
   },
   dino_herbivore: {
     label: 'Трав. динозавр', color: '#f1c40f', diet: 'herbivore', cap: 9, spawnChance: 0.003,
@@ -101,14 +98,11 @@ export const BALANCE = {
   KNOCKBACK_FORCE: 260,        // базова швидкість (px/с) відштовхування жертви від удару
   KNOCKBACK_CRIT_MULTIPLIER: 1.6, // додатковий множник сили для "впритул"-удару (lethalBonus)
   KNOCKBACK_DURATION_MS: 220,  // як довго діє відштовхування і AI-юніт не контролює рух
-  KNOCKBACK_ENERGY_THRESHOLD: 0.35, // жертву відкидає лише коли energy впала нижче цієї частки -
-                                     // поки сил вистачає, юніт стоїть на місці й б'ється у відповідь
-  COUNTER_ATTACK_RATIO: 0.5,   // частка отриманого удару (flow), яку жертва повертає нападнику у відповідь
+  KNOCKBACK_ENERGY_THRESHOLD: 0.35, // жертву відкидає лише коли energy впала нижче цієї частки
+  COUNTER_ATTACK_RATIO: 0.5,   // частка отриманого удару, яку жертва повертає нападнику у відповідь
   COUNTER_ATTACK_MIN_ENERGY_FRAC: 0.15, // жертва надто виснажена (менше цієї частки energy) - контрудару не буде
-  COUNTER_XP_RATIO: 0.25,      // бонусний XP за вдалий контрудар (додатково до XP за саме виживання)
+  COUNTER_XP_RATIO: 0.25,      // бонусний XP за вдалий контрудар
   COUNTER_SCARE_THRESHOLD: 0.30, // якщо контрудар забрав більше цієї частки maxEnergy нападника - той лякається й відскакує
-  LEVEL_UP_SAFE_DELAY_MS: 3000, // прокачка (застосування накопиченого XP) відбувається лише у
-                                 // відпочинку АБО якщо бою не було стільки часу - не посеред сутички
   SURVIVAL_XP_RATIO: 0.35,     // частка XP, яку жертва отримує за ПЕРЕЖИТУ (не смертельну) атаку
   EVADE_XP_RATIO: 0.15,        // частка XP за УСПІШНУ превентивну втечу (не дати себе вкусити)
   EVADE_XP_COOLDOWN_MS: 3000,  // щоб не фармити XP щокадру, тікаючи від того самого хижака

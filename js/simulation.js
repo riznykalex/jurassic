@@ -20,9 +20,9 @@ let selectedIds = new Set();
 let stats = { kills: 0, deaths: 0, levelUps: 0 };
 let structures = [];
 export const BUILD_COST = 5;
-const DESTROY_COST = 5;
-const DROP_FOOD_COST = 1.2;
-const FOOD_DROP_ENERGY = 1.4;
+const DESTROY_COST = BUILD_COST; // той самий кошт, що й побудова каменя
+const STONE_RADIUS = 18;
+const APPROACH_MARGIN = 12; // "стати поруч" для DESTROY - не впритул до центру, а в межах цього допуску за колізією
 export const DROP_FOOD_THRESHOLD = 100;
 export const DROP_FOOD_AMOUNT = 100;
 
@@ -139,7 +139,7 @@ function createStructure(x, y) {
     id: nextStructureId++,
     x,
     y,
-    radius: 18,
+    radius: STONE_RADIUS,
     type: 'stone',
     frameIndex: Math.floor(Math.random() * 6),
   };
@@ -155,7 +155,7 @@ function findStructureAt(x, y, targetId = null) {
 }
 
 function canPlaceStructure(x, y) {
-  const radius = 18;
+  const radius = STONE_RADIUS;
   if (x < radius || x > WIDTH - radius || y < radius || y > HEIGHT - radius) return false;
   return !structures.some((structure) => Math.hypot(structure.x - x, structure.y - y) < structure.radius + 10);
 }
@@ -263,14 +263,25 @@ function queueAction(ids, action) {
     ball.attackTargetId = null;
     ball.isResting = false;
 
-    if (action.type === 'drop_food' || action.type === 'build' || action.type === 'destroy') {
+    if (action.type === 'drop_food' || action.type === 'build') {
       ball.pendingAction = { ...action };
       executePendingAction(ball);
       return;
     }
 
+    // destroy (і interact) - юніт мусить фізично підійти до цілі, тож ідемо
+    // до РЕАЛЬНИХ координат структури/об'єкта, а не координат кліку (клік
+    // міг бути на кілька px осторонь завдяки допуску влучання).
+    let targetX = action.x, targetY = action.y;
+    if (action.type === 'destroy') {
+      const structure = structures.find((item) => item.id === action.targetId);
+      if (!structure) return; // каменя вже нема (хтось інший зруйнував раніше)
+      targetX = structure.x;
+      targetY = structure.y;
+    }
+
     ball.pendingAction = { ...action };
-    ball.manualTarget = { x: action.x, y: action.y };
+    ball.manualTarget = { x: targetX, y: targetY };
     ball.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
   });
 }
@@ -575,6 +586,31 @@ function selectBallsInRect(x1, y1, x2, y2) {
   /* --- Автономна поведінка одного юніта --- */
   function decideBehaviour(unit, dt) {
     if (performance.now() < unit.knockbackUntil) return; // юніт летить від удару - нічого не вирішує
+
+    // Якщо є незавершена дія (зараз - лише destroy, бо build/drop_food
+    // виконуються миттєво), але шлях до неї перервався (напр. по дорозі
+    // довелось зупинитись на відпочинок - REST_THRESHOLD скидає
+    // manualTarget) - відновлюємо рух до тієї ж цілі, інакше pendingAction
+    // висить назавжди, а юніт стоїть істуканом.
+    if (unit.pendingAction && !unit.manualTarget && !unit.isResting && performance.now() >= unit.manualUntil) {
+      const action = unit.pendingAction;
+      let target = null;
+      if (action.type === 'destroy') {
+        const structure = structures.find((item) => item.id === action.targetId);
+        target = structure ? { x: structure.x, y: structure.y } : null;
+      } else if (action.type === 'interact') {
+        target = { x: action.x, y: action.y };
+      }
+      if (target) {
+        unit.manualTarget = target;
+        unit.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
+        unit.isResting = false;
+      } else {
+        unit.pendingAction = null; // ціль зникла (камінь уже хтось зруйнував)
+      }
+      return;
+    }
+
     if ((unit.manualTarget || performance.now() < unit.manualUntil) && !unit.attackTargetId) return;
     const cfg = SPECIES[unit.type];
     const { cx, cy } = ballCenter(unit);
@@ -843,6 +879,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
       unit.vy = unit.knockbackVy * decay;
       unit.x = clamp(unit.x + unit.vx * dt, 0, WIDTH - s);
       unit.y = clamp(unit.y + unit.vy * dt, 0, HEIGHT - s);
+      resolveStructureCollisions(unit); // інакше сильний удар міг прокинути юніта наскрізь крізь стіну каменів
       unit.isMoving = true;  // щоб рендерер показав анімацію руху
       unit.isResting = false; // інакше isResting (перевіряється раніше за рух у
                                // renderer.js) все одно малював би заморожений
@@ -876,7 +913,14 @@ function selectBallsInRect(x1, y1, x2, y2) {
       const { cx, cy } = ballCenter(unit);
       const dx = unit.manualTarget.x - cx, dy = unit.manualTarget.y - cy;
       const d = Math.hypot(dx, dy);
-      if (d < 3) {
+      // Для destroy до центру каменя впритул не підійти - колізія
+      // (resolveStructureCollisions) фізично зупинить юніта на межі
+      // unitRadius+STONE_RADIUS раніше. Поріг прибуття має враховувати це,
+      // інакше юніт ніколи не "дійде" (вічно тупцятиме на межі каменя).
+      const arriveDist = (unit.pendingAction && unit.pendingAction.type === 'destroy')
+        ? ballSize(unit) / 2 + STONE_RADIUS + APPROACH_MARGIN
+        : 3;
+      if (d < arriveDist) {
         unit.manualTarget = null;
         unit.manualUntil = 0;
         unit.isMoving = false;
