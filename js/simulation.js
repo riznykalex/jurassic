@@ -1,4 +1,4 @@
-﻿// js/simulation.js
+// js/simulation.js
 import { SPECIES, BALANCE, WIDTH, HEIGHT } from './config.js';
 import { dist, clamp, GRASS_SYMBOLS } from './utils.js';
 import { EventBus, EVENTS } from './events.js';
@@ -25,6 +25,7 @@ const STONE_RADIUS = 18;
 const APPROACH_MARGIN = 12; // "стати поруч" для DESTROY - не впритул до центру, а в межах цього допуску за колізією
 export const DROP_FOOD_THRESHOLD = 100;
 export const DROP_FOOD_AMOUNT = 100;
+const FROZEN_FOOD_DURATION_MS = 20000;
 
 function xpForKill(winnerLevel, loserLevel) {
   const diff = loserLevel - winnerLevel;
@@ -96,6 +97,10 @@ function ballSize(ball) {
 function ballCenter(ball) {
   const s = ballSize(ball);
   return { cx: ball.x + s / 2, cy: ball.y + s / 2 };
+}
+
+function isFoodAvailable(food) {
+  return !food.frozenUntil || performance.now() >= food.frozenUntil;
 }
 
 // === spawn functions ===
@@ -239,6 +244,7 @@ function executePendingAction(unit) {
         y: action.y ?? unit.y + ballSize(unit) / 2,
         energy: dropAmount,
         type: 'meat',
+        frozenUntil: performance.now() + FROZEN_FOOD_DURATION_MS,
       });
       break;
     }
@@ -695,6 +701,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
       // якщо він проходить прямо по шматку їжі (за наказом гравця чи стоячи
       // на місці) - підбирає її пасивно, без окремого пошуку.
       for (const f of foods) {
+        if (!isFoodAvailable(f)) continue;
         if (f.type !== 'meat') continue; // людина їсть лише м'ясо (diet: hunter)
         const dd = dist(cx, cy, f.x, f.y);
         if (dd < ballSize(unit) / 2 + 6) {
@@ -750,6 +757,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
     // 3. Пошук їжі (трава для травоїдних, м'ясо для хижаків/людини)
     let closestF = null, minF = Infinity;
     for (const f of foods) {
+      if (!isFoodAvailable(f)) continue;
       if (cfg.diet === 'herbivore' && f.type !== 'grass') continue;
       if ((cfg.diet === 'carnivore' || cfg.diet === 'hunter') && f.type !== 'meat') continue;
       const dd = dist(cx, cy, f.x, f.y);
@@ -966,6 +974,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
       if (cfg.manualOnly) {
         const { cx, cy } = ballCenter(unit);
         for (const f of foods) {
+          if (!isFoodAvailable(f)) continue;
           if (f.type !== 'meat') continue;
           if (dist(cx, cy, f.x, f.y) < s / 2 + 6) {
             unit.energy = Math.min(maxEnergy(unit), unit.energy + f.energy);
