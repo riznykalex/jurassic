@@ -1,4 +1,4 @@
-﻿// js/renderer.js
+// js/renderer.js
 import { SPECIES, BALANCE, WIDTH, HEIGHT } from './config.js';
 import { SimulationEngine } from './simulation.js';
 import { spriteFramePosition, formatValue, clamp } from './utils.js';
@@ -156,8 +156,10 @@ function syncBalls() {
       }
     } 
     // Пріоритет №2: Відпочинок
+    // Відпочинок і простий стан використовуємо як один idle, щоб юніт
+    // не перемикався на окремий "rest"-стан і не втрачав єдину анімацію.
     else if (b.isResting) {
-      rawState = 'rest';
+      rawState = 'idle';
     } 
     // Пріоритет №3: Ходьба (тільки якщо швидкість суттєва)
     else if ((b.isMoving || b.manualTarget !== null) && actualSpeed > IS_MOVING_THRESHOLD) {
