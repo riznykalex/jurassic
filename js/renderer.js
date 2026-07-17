@@ -155,9 +155,13 @@ function syncBalls() {
         rawState = dd < bite ? 'attack' : (actualSpeed > IS_MOVING_THRESHOLD ? 'walk' : 'idle');
       }
     } 
-    // Пріоритет №2: Ходьба (тільки якщо швидкість суттєва) - колишній
-    // окремий стан "відпочинок" більше не існує: юніт або йде, або idle,
-    // і в idle він і так відновлюється (регенерація в moveBall).
+    // Пріоритет №2: Відпочинок/idle
+    // Відпочинок і простий стан використовуємо як один idle, щоб юніт
+    // не перемикався на окремий "rest"-стан і не втрачав єдину анімацію.
+    else if (b.isResting) {
+      rawState = 'idle';
+    }
+    // Пріоритет №3: Ходьба (тільки якщо швидкість суттєва)
     else if ((b.isMoving || b.manualTarget !== null) && actualSpeed > IS_MOVING_THRESHOLD) {
       rawState = 'walk';
     } 
