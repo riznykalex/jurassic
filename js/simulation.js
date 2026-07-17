@@ -1015,7 +1015,7 @@ function tick(dt) {
 }
 
 function init() {
-  for (let i = 0; i < 6; i++) spawnRandomBall('human');
+  for (let i = 0; i < 8; i++) spawnRandomBall('human');
   for (let i = 0; i < 6; i++) spawnRandomBall('tribe_bot');
   for (let i = 0; i < 6; i++) spawnRandomBall('wolf');
   spawnRandomBall('dino_predator');
