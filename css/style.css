@@ -1,0 +1,71 @@
+body,html{margin:0;padding:0;overflow:auto;background:#111;font-family:Arial;}
+#game{position:relative;background:#223322 url('bg13075.jpg') repeat top left;overflow:hidden;}
+.unit{position:absolute;transform-origin:50% 100%;transition:transform .3s ease-out;}
+.ball{position:absolute;top:0;left:0;border-radius:50%;box-sizing:border-box;user-select:none;cursor:pointer;
+      transition:box-shadow .15s, transform .15s;}
+.ball.selected::before{content:'';position:absolute;inset:0;border-radius:50%;
+      box-shadow:0 0 14px 4px yellow;pointer-events:none;}
+
+/* --- ЗАГЛУШКИ анімації станів (замінити на background-image спрайт-листа,
+   коли з'явиться графіка - клас лишається той самий, міняється лише вигляд) --- */
+.ball.state-idle{animation:idleSway 2.2s ease-in-out infinite;}
+.ball.state-walk{animation:walkBob 0.35s ease-in-out infinite;}
+.ball.state-attack{animation:attackFlash 0.25s ease-in-out infinite;}
+.ball.state-rest{animation:restPulse 1.8s ease-in-out infinite;}
+.unit.facing-left .ball{transform:scaleX(-1);}
+
+@keyframes idleSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(3deg)}}
+@keyframes walkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes attackFlash{0%,100%{filter:brightness(1)}50%{filter:brightness(1.6)}}
+@keyframes restPulse{0%,100%{opacity:1}50%{opacity:0.75}}
+/* --- Реальний спрайт T-Rex (256x192px, сітка 4x3, кадр 64x64) ---
+   Ряд 1 (y=0): рух ВГОРУ (dir-up)
+   Ряд 2 (y=-64px): вигляд збоку - основна анімація ходьби/втечі/атаки
+   Ряд 3 (y=-128px): рух ВНИЗ (dir-down)
+   Однакова логіка для БУДЬ-ЯКОГО виду - background-image задається інлайново
+   з JS (cfg.spriteFile), сама сітка/анімація - спільна */
+.ball.has-sprite{
+  background-repeat:no-repeat;
+  background-size:256px 192px;
+  image-rendering:pixelated;
+  animation:none !important; /* кадр більше НЕ керується CSS-анімацією - рахується напряму
+                      в JS (spriteFramePosition) і встановлюється inline-стилем.
+                      Це прибрало мерехтіння/порожні кадри, які виникали через
+                      рестарт CSS @keyframes при зміні className. */
+}
+
+/* Розворот (facing-left) навмисно на .unit-обгортці, а не на .ball - інакше
+   статичний transform:scaleX(-1) конфліктував би з transform у @keyframes. */
+
+.unit-label{position:absolute;top:-16px;left:50%;transform:translateX(-50%);
+      color:#fff;font-size:10px;font-weight:bold;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000;}
+.bar-bg{position:absolute;top:-6px;left:0;width:100%;height:4px;background:#000a;border-radius:2px;overflow:hidden;}
+.bar-fill{height:100%;background:#2ecc71;transition:width .2s;}
+.food{position:absolute;border-radius:50%;}
+.food.meat{background:transparent;border:none;display:flex;align-items:center;justify-content:center;
+      font-size:14px;line-height:1;}
+.food.grass{background:transparent;border:none;display:flex;align-items:center;justify-content:center;
+      font-size:14px;line-height:1;}
+.food.poison{background:transparent;border:none;display:flex;align-items:center;justify-content:center;
+      line-height:1;}
+#hud{position:fixed;top:8px;left:8px;color:#eee;font:12px monospace;
+     background:rgba(0,0,0,.6);padding:6px 10px;border-radius:6px;z-index:10;line-height:1.5;}
+#legend{position:fixed;top:8px;right:8px;color:#eee;font:12px Arial;
+     background:rgba(0,0,0,.6);padding:8px 10px;border-radius:6px;z-index:10;line-height:1.7;}
+#legend .swatch{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;}
+.legend-icon{display:inline-block;vertical-align:middle;margin-right:6px;
+     background-repeat:no-repeat;image-rendering:pixelated;}
+.legend-row{cursor:pointer;padding:2px 3px;border-radius:3px;transition:background .12s;}
+.legend-row:hover{background:rgba(255,255,255,.12);}
+.legend-empty{opacity:.45;cursor:default;}
+.legend-empty:hover{background:none;}
+#selection-box{position:fixed;border:1px dashed #4da6ff;background:rgba(77,166,255,.15);
+     pointer-events:none;z-index:9;display:none;}
+.structure{position:absolute;display:block;pointer-events:auto;image-rendering:pixelated;}
+.context-menu{position:fixed;z-index:20;background:rgba(10,16,24,.95);border:1px solid #4da6ff;border-radius:8px;padding:6px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.35);} 
+.context-menu button{display:block;width:100%;margin:4px 0;padding:6px 8px;border:none;border-radius:4px;background:#23354b;color:#f5f7fb;cursor:pointer;text-align:left;} 
+.context-menu button:hover{background:#34506f;} 
+.context-menu button:disabled{opacity:.45;cursor:not-allowed;} 
+.context-menu .context-icon{width:28px;height:28px;padding:0;background-position:center;background-size:96px 16px;border:1px solid #4da6ff;background-color:transparent;display:inline-block;}
+#game.mode-build{cursor:crosshair;}
+#game.mode-destroy{cursor:cell;}
