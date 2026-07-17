@@ -1,4 +1,4 @@
-﻿// js/config.js
+// js/config.js
 export const WIDTH = window.innerWidth * 2;
 export const HEIGHT = window.innerHeight * 2;
 
@@ -63,9 +63,9 @@ export const SPECIES = {
 
 export const BALANCE = {
   ENERGY_PER_PIXEL: 0.0022,
-  SPEED_MULTIPLIER: 0.5,       // загальне сповільнення - щоб анімація встигала показатись
+  SPEED_MULTIPLIER: 0.2,       // загальне сповільнення - щоб анімація встигала показатись
   SLEEP_REGEN: 0.012,
-  STARVATION_DRAIN: 0.15,      // energy/сек, яку юніт БЕЗ запасу їжі (value<=0) втрачає навіть у спокої
+  STARVATION_DRAIN: 0.05,      // energy/сек, яку юніт БЕЗ запасу їжі (value<=0) втрачає навіть у спокої
   MANUAL_LOCK_MS: 2500,
   MAX_TOTAL_BALLS: 74,
   MAX_FOOD: 150,
