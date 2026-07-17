@@ -269,7 +269,7 @@ function syncFoods() {
     }
     // Scale food icons but cap growth to avoid huge sprites for large energy
     const BASE_FOOD_SIZE = 8;
-    const MAX_FOOD_ICON = 96; // maximum width/height in px for any food icon
+    const MAX_FOOD_ICON = 64; // maximum width/height in px for any food icon
     let size;
     if (f.type === 'grass') {
       // grass scales a bit more but still capped
@@ -300,8 +300,8 @@ function syncPoisons() {
       div = document.createElement('div');
       div.className = 'food poison';
       div.textContent = '☠️';
-      div.style.width = '16px'; div.style.height = '16px';
-      div.style.fontSize = '14px';
+      div.style.width = '32px'; div.style.height = '32px';
+      div.style.fontSize = '22px';
       game.appendChild(div);
       poisonDivs.set(p.id, div);
     }
