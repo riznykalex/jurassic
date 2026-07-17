@@ -265,8 +265,9 @@ function syncFoods() {
     if (!div) {
       div = document.createElement('div');
       div.className = 'food ' + f.type;
-      if (f.type === 'meat') div.textContent = '🍖';
-      else if (f.type === 'grass') div.textContent = f.symbol || '🌿';
+      const isFrozen = !!f.frozenUntil && performance.now() < f.frozenUntil;
+      if (f.type === 'meat') div.textContent = isFrozen ? '🧊🍖' : '🍖';
+      else if (f.type === 'grass') div.textContent = isFrozen ? '🧊' + (f.symbol || '🌿') : (f.symbol || '🌿');
       game.appendChild(div);
       foodDivs.set(f.id, div);
     }
