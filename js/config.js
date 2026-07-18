@@ -86,7 +86,10 @@ export const BALANCE = {
   POISON_DAMAGE: 0.35,
   POISON_COOLDOWN_MS: 1500,
   XP_BASE: 10,
-  XP_LEVEL_UP_COST: 18,
+  XP_LEVEL_UP_COST: 10,        // було 18 - рівень тепер дешевший (спрощення системи прокачки)
+  LEVEL_UP_SAFE_DELAY_MS: 1200, // відсутня константа - через це прокачка НЕ спрацьовувала взагалі
+                                 // (now - lastCombatAt > undefined завжди false). Було задумано 3000,
+                                 // тепер 1200 - легше "закешувати" прогрес між сутичками
   LEVEL_ENERGY_GAIN: 1.1,
   CRITICAL_FLEE_THRESHOLD: 0.30,
   CRITICAL_FLEE_CHANCE_BONUS: 1.6,
