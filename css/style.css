@@ -69,3 +69,12 @@ body,html{margin:0;padding:0;overflow:auto;background:#111;font-family:Arial;}
 .context-menu .context-icon{width:28px;height:28px;padding:0;background-position:0px 0px;background-size:168px 28px;background-repeat:no-repeat;border:1px solid #4da6ff;background-color:transparent;display:inline-block;}
 #game.mode-build{cursor:crosshair;}
 #game.mode-destroy{cursor:cell;}
+#game-over-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.75);
+     display:flex;align-items:center;justify-content:center;}
+.game-over-box{background:#1a1f26;border:1px solid #4da6ff;border-radius:12px;
+     padding:32px 48px;text-align:center;color:#f5f7fb;box-shadow:0 12px 40px rgba(0,0,0,.5);}
+.game-over-box h1{margin:0 0 8px;font-size:28px;color:#e74c3c;}
+.game-over-box p{margin:0 0 20px;color:#c8d0da;}
+.game-over-box button{padding:10px 24px;font-size:15px;border:none;border-radius:6px;
+     background:#4da6ff;color:#0a1420;cursor:pointer;font-weight:bold;}
+.game-over-box button:hover{background:#6db8ff;}
