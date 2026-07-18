@@ -18,8 +18,10 @@ export const SPECIES = {
     label: 'Дике плем\'я', color: '#16a085', diet: 'hunter', cap: 12, spawnChance: 0.0015,
     baseEnergy: 6, maxEnergyBase: 8, speed: 105, sizeBase: 22, trophicWeight: 1,
     visionDanger: 220, visionFood: 260, visionPrey: 320, spriteFile: 'assets/tribe_2_4x3.png',
-    aggressive: true, playerControllable: false, tribal: true,
+    aggressive: true, playerControllable: false, tribal: true, canBuildWalls: true,
     // повністю автономне: саме шукає їжу, полює, тримається купи (як людина раніше)
+    // canBuildWalls: вміє будувати з каміння лінії-стіни (щит від загрози
+    // або просто сховище), той самий ресурс (value), що й у гравця
   },
   wolf: {
     label: 'Вовк', color: '#cfcfcf', diet: 'carnivore', cap: 20, spawnChance: 0.010,
