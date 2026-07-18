@@ -1,4 +1,4 @@
-﻿// js/simulation.js
+// js/simulation.js
 import { SPECIES, BALANCE, WIDTH, HEIGHT } from './config.js';
 import { dist, clamp, GRASS_SYMBOLS } from './utils.js';
 import { EventBus, EVENTS } from './events.js';
@@ -1181,8 +1181,7 @@ export const SimulationEngine = {
   expandToClusters,
   getTopUnitBySpecies,
   hasPlayerUnits,
-<<<<<<< HEAD
+
 };
-=======
-};
->>>>>>> 7277f4e (Enhance species behavior and AI wall-building mechanics; unify idle and resting states for improved energy regeneration)
+
+
