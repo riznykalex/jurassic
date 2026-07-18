@@ -25,7 +25,7 @@ function showGameOver() {
 }
 
 function gameLoop(ts = performance.now()) {
-  const realDt = Math.min(0.1, (ts - lastTs) / 1000); // реальний плинний час, з захистом від "стрибків" (згорнута вкладка тощо)
+  const realDt = Math.min(0.1, (ts - lastTs) / 1000); // реальний плинний час, з захистом від "стрибків" (згорнула вкладка тощо)
   lastTs = ts;
   const dt = realDt * BALANCE.GAME_SPEED; // ефективний час симуляції - тут і відбувається сповільнення/прискорення
 
@@ -35,7 +35,7 @@ function gameLoop(ts = performance.now()) {
   if (!gameOver && !SimulationEngine.hasPlayerUnits()) {
     gameOver = true;
     showGameOver();
-    return; // не плануємо наступний кадр - симуляція й рендер зупиняються
+    return; // не плануємо наступний кадр - плем'я вимерло, гра остаточно завершена
   }
 
   if (!gameOver) requestAnimationFrame(gameLoop);
