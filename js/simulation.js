@@ -1181,4 +1181,8 @@ export const SimulationEngine = {
   expandToClusters,
   getTopUnitBySpecies,
   hasPlayerUnits,
+<<<<<<< HEAD
 };
+=======
+};
+>>>>>>> 7277f4e (Enhance species behavior and AI wall-building mechanics; unify idle and resting states for improved energy regeneration)
