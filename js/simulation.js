@@ -1181,7 +1181,4 @@ export const SimulationEngine = {
   expandToClusters,
   getTopUnitBySpecies,
   hasPlayerUnits,
-
 };
-
-
