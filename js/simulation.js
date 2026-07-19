@@ -71,6 +71,8 @@ function makeBall(type, x, y) {
     lastSurvivalXpAt: 0,
     pendingAction: null,
     wallPlan: null, // { angle, curvature, remaining, nextX, nextY } - AI-план багатокаменевої стіни
+    interruptedTarget: null, // { x, y } - куди йшов, коли REST_THRESHOLD перервав ЗВИЧАЙНУ команду руху
+    avoidSide: 0, // гістерезис об'їзду перешкоди: 0=вільний вибір, ±1=бік уже обрано і тримається
     _tempAggressiveUntil: 0,
   };
 }
@@ -173,6 +175,73 @@ function canPlaceStructure(x, y) {
   // + STONE_RADIUS), інакше два камені могли фізично накластись одне на
   // одного (з окремим +10 це давало лише 28 при потрібних 36).
   return !structures.some((structure) => Math.hypot(structure.x - x, structure.y - y) < structure.radius + STONE_RADIUS);
+}
+
+// Об'їзд перешкод: дивимось трохи вперед по напрямку руху юніта, і якщо
+// там камінь - плавно відхиляємо напрямок ВБІК (у той бік, де перешкода
+// менше заважає), замість того щоб юніт просто впирався в неї й стояв.
+// Це стосується будь-якого руху (гравцівська команда, полювання, втеча,
+// AI-будівництво стіни) - все воно зрештою проходить через vx/vy, які тут
+// коригуються ПЕРЕД застосуванням кроку в moveBall.
+function applyObstacleSteering(unit) {
+  if (structures.length === 0) return;
+  // Виняток: якщо юніт навмисно прямує ВПРИТУЛ до конкретного каменя
+  // (будує стіну поруч із попереднім каменем, чи йде руйнувати) - об'їзд
+  // вимкнено, інакше він ніколи не досягне потрібної точки.
+  if (unit.pendingAction && (unit.pendingAction.type === 'build_at' || unit.pendingAction.type === 'destroy')) return;
+  const speed = Math.hypot(unit.vx, unit.vy);
+  if (speed < 1) return; // не рухається - нема що обходити
+  const { cx, cy } = ballCenter(unit);
+  const ur = ballSize(unit) / 2;
+  const dirX = unit.vx / speed, dirY = unit.vy / speed;
+  const LOOKAHEAD = ur + STONE_RADIUS + 60; // наскільки далеко вперед "бачимо" перешкоду
+
+  // Знаходимо НАЙБЛИЖЧУ перешкоду, що реально заважає лінії руху. Раніше
+  // сумувались сили відштовхування від УСІХ каменів одразу - при щільній
+  // стіні з кількох каменів це давало конфліктуючі, частково взаємогасні
+  // сили, і юніт "зависав" на межі, не просуваючись уздовж стіни.
+  let nearest = null, nearestPerpDist = Infinity;
+  for (const s of structures) {
+    const toStoneX = s.x - cx, toStoneY = s.y - cy;
+    const distToStone = Math.hypot(toStoneX, toStoneY);
+    if (distToStone > LOOKAHEAD) continue;
+    const along = toStoneX * dirX + toStoneY * dirY;
+    if (along <= -STONE_RADIUS || along > LOOKAHEAD) continue; // позаду або задалеко попереду
+    const perpX = toStoneX - dirX * along, perpY = toStoneY - dirY * along;
+    const perpDist = Math.hypot(perpX, perpY);
+    const blockRadius = ur + s.radius + 10;
+    if (perpDist > blockRadius) continue; // ця перешкода не заважає лінії руху
+    if (perpDist < nearestPerpDist) { nearestPerpDist = perpDist; nearest = s; }
+  }
+  if (!nearest) {
+    unit.avoidSide = 0; // перешкод немає - наступного разу можна вільно обрати бік знову
+    return;
+  }
+
+  // Ковзаємо ВЗДОВЖ перешкоди (дотична до напрямку "юніт->камінь"), а не
+  // просто відштовхуємось від неї - це і є "обхід", а не смикання на місці.
+  const toStoneX = nearest.x - cx, toStoneY = nearest.y - cy;
+  const distToStone = Math.hypot(toStoneX, toStoneY) || 1;
+  const nx = toStoneX / distToStone, ny = toStoneY / distToStone;
+  let tangentX = -ny, tangentY = nx;
+
+  // Гістерезис боку: раз обраний бік тримається протягом усього маневру,
+  // поки перешкода не залишиться позаду (avoidSide скидається вище).
+  if (!unit.avoidSide) {
+    const side = dirX * (-tangentY) + dirY * tangentX;
+    unit.avoidSide = side >= 0 ? 1 : -1;
+  }
+  tangentX *= unit.avoidSide;
+  tangentY *= unit.avoidSide;
+
+  // Переважно вздовж дотичної (обхід), з невеликою домішкою оригінального
+  // напрямку - щоб з часом природно "зрізати" назад до цілі.
+  const TANGENT_WEIGHT = 0.85;
+  const newDirX = tangentX * TANGENT_WEIGHT + dirX * (1 - TANGENT_WEIGHT);
+  const newDirY = tangentY * TANGENT_WEIGHT + dirY * (1 - TANGENT_WEIGHT);
+  const newLen = Math.hypot(newDirX, newDirY) || 1;
+  unit.vx = (newDirX / newLen) * speed;
+  unit.vy = (newDirY / newLen) * speed;
 }
 
 function resolveStructureCollisions(unit) {
@@ -548,6 +617,7 @@ function queueAction(ids, action) {
 
   function setManualTarget(ball, x, y) {
     ball.attackTargetId = null; // звичайна команда руху скасовує попередній наказ атаки
+    ball.interruptedTarget = null; // нова команда скасовує стару перервану ціль
     ball.manualTarget = { x, y };
     ball.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
   }
@@ -675,6 +745,18 @@ function selectBallsInRect(x1, y1, x2, y2) {
         unit.pendingAction = null; // ціль зникла (камінь уже хтось зруйнував)
         unit.wallPlan = null;
       }
+      return;
+    }
+
+    // Відновлення ЗВИЧАЙНОЇ (гравцівської) команди руху, перерваної
+    // REST_THRESHOLD по дорозі (об'їзд перешкоди міг подовжити шлях і
+    // виснажити energy раніше, ніж юніт устиг дійти). Без цього юніт просто
+    // лишався б стояти там, де закінчилась energy, назавжди.
+    if (unit.interruptedTarget && !unit.manualTarget && !unit.pendingAction
+        && myEnergyFrac >= BALANCE.RESUME_THRESHOLD && performance.now() >= unit.manualUntil) {
+      unit.manualTarget = unit.interruptedTarget;
+      unit.manualUntil = performance.now() + BALANCE.MANUAL_LOCK_MS;
+      unit.interruptedTarget = null;
       return;
     }
 
@@ -1013,6 +1095,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
       }
     }
     if (unit.isMoving) {
+      applyObstacleSteering(unit); // об'їзд каміння - перед тим, як крок узагалі застосується
       const stepx = unit.vx * dt, stepy = unit.vy * dt;
       unit.x += stepx; unit.y += stepy;
       const pixels = Math.hypot(stepx, stepy);
@@ -1020,6 +1103,12 @@ function selectBallsInRect(x1, y1, x2, y2) {
       const s = ballSize(unit);
       if (unit.energy <= maxEnergy(unit) * BALANCE.REST_THRESHOLD) {
         unit.energy = Math.max(0.05, unit.energy);
+        // Якщо це була ЗВИЧАЙНА команда руху (без pendingAction - той уже
+        // має власну логіку відновлення) - запам'ятовуємо, куди йшов, щоб
+        // decideBehaviour міг відновити рух після того, як energy набереться.
+        if (unit.manualTarget && !unit.pendingAction) {
+          unit.interruptedTarget = { x: unit.manualTarget.x, y: unit.manualTarget.y };
+        }
         unit.manualTarget = null; unit.manualUntil = 0; unit.isMoving = false;
         unit.vx = 0; unit.vy = 0; // без цього стара швидкість "застрягала" в юніті і
         // рендерер міг сприймати вже нерухомого юніта як такого, що йде -
