@@ -33,6 +33,11 @@ const BOT_WALL_MAX_STONES = 4;
 const BOT_WALL_VALUE_RESERVE = 1.5;   // запас value має бути принаймні BUILD_COST * камені * цей множник
 const BOT_WALL_CURVE_CHANCE = 0.5;    // шанс що стіна буде кривою, а не прямою
 const BOT_WALL_CURVE_STEP = 0.35;     // радіан нахилу напрямку на кожен наступний камінь (крива стіна)
+// --- "Застряг об камінь": кілька спроб об'їзду, тоді пауза, тоді відступ ---
+const STUCK_TRY_MS = 500;    // тривалість однієї спроби обійти перешкоду перед тим, як визнати невдачу
+const STUCK_PAUSE_MS = 350;  // маленька пауза між спробами
+const STUCK_MAX_TRIES = 3;   // скільки спроб перед тим, як здатись і відступити
+const STUCK_RETREAT_MS = 650; // тривалість відступу в протилежний бік
 
 function xpForKill(winnerLevel, loserLevel) {
   const diff = loserLevel - winnerLevel;
@@ -73,6 +78,12 @@ function makeBall(type, x, y) {
     wallPlan: null, // { angle, curvature, remaining, nextX, nextY } - AI-план багатокаменевої стіни
     interruptedTarget: null, // { x, y } - куди йшов, коли REST_THRESHOLD перервав ЗВИЧАЙНУ команду руху
     avoidSide: 0, // гістерезис об'їзду перешкоди: 0=вільний вибір, ±1=бік уже обрано і тримається
+    stuckSince: 0,   // коли почалась поточна "спроба" обійти перешкоду (0 = не застряг)
+    stuckTries: 0,   // скільки спроб уже було
+    pauseUntil: 0,   // поки now < це - коротка пауза між спробами
+    retreatUntil: 0, // поки now < це - відступає в протилежний від перешкоди бік
+    retreatVx: 0,
+    retreatVy: 0,
     _tempAggressiveUntil: 0,
   };
 }
@@ -215,7 +226,34 @@ function applyObstacleSteering(unit) {
   }
   if (!nearest) {
     unit.avoidSide = 0; // перешкод немає - наступного разу можна вільно обрати бік знову
+    unit.stuckSince = 0;
+    unit.stuckTries = 0;
     return;
+  }
+
+  // Лічильник спроб: якщо перешкода заважає безперервно довше за
+  // STUCK_TRY_MS - це одна невдала "спроба". Після STUCK_MAX_TRIES спроб
+  // здаємось: коротка пауза (нижче в moveBall), а потім явний відступ у
+  // протилежний від перешкоди бік, замість того щоб нескінченно тертись
+  // об неї (саме це заважало атакувати ціль біля каменя).
+  const now = performance.now();
+  if (!unit.stuckSince) unit.stuckSince = now;
+  if (now - unit.stuckSince > STUCK_TRY_MS) {
+    unit.stuckTries = (unit.stuckTries || 0) + 1;
+    unit.stuckSince = now;
+    if (unit.stuckTries >= STUCK_MAX_TRIES) {
+      const awayX = cx - nearest.x, awayY = cy - nearest.y;
+      const awayLen = Math.hypot(awayX, awayY) || 1;
+      unit.retreatVx = (awayX / awayLen) * speed;
+      unit.retreatVy = (awayY / awayLen) * speed;
+      unit.retreatUntil = now + STUCK_RETREAT_MS;
+      unit.stuckTries = 0;
+      unit.stuckSince = 0;
+      unit.avoidSide = 0;
+      unit.vx = 0; unit.vy = 0; // цей тік просто стоп; з наступного відступ візьме гору (top moveBall)
+      return;
+    }
+    unit.pauseUntil = now + STUCK_PAUSE_MS;
   }
 
   // Ковзаємо ВЗДОВЖ перешкоди (дотична до напрямку "юніт->камінь"), а не
@@ -689,6 +727,7 @@ function selectBallsInRect(x1, y1, x2, y2) {
   /* --- Автономна поведінка одного юніта --- */
   function decideBehaviour(unit, dt) {
     if (performance.now() < unit.knockbackUntil) return; // юніт летить від удару - нічого не вирішує
+    if (performance.now() < unit.retreatUntil || performance.now() < unit.pauseUntil) return; // застряг об камінь - зараз або пауза, або відступ
 
     const cfg = SPECIES[unit.type];
     const { cx, cy } = ballCenter(unit);
@@ -1039,6 +1078,24 @@ function selectBallsInRect(x1, y1, x2, y2) {
       unit.y = clamp(unit.y + unit.vy * dt, 0, HEIGHT - s);
       resolveStructureCollisions(unit); // інакше сильний удар міг прокинути юніта наскрізь крізь стіну каменів
       unit.isMoving = true;  // щоб рендерер показав анімацію руху, не заморожений idle-кадр
+      return;
+    }
+
+    // Відступ після кількох невдалих спроб обійти перешкоду (див.
+    // applyObstacleSteering/STUCK_*) - юніт явно йде геть від каменя, а не
+    // нескінченно треться об нього, заважаючи собі ж атакувати ціль поруч.
+    if (now < unit.retreatUntil) {
+      const s = ballSize(unit);
+      unit.x = clamp(unit.x + unit.retreatVx * dt, 0, WIDTH - s);
+      unit.y = clamp(unit.y + unit.retreatVy * dt, 0, HEIGHT - s);
+      resolveStructureCollisions(unit);
+      unit.isMoving = true;
+      return;
+    }
+
+    // Коротка пауза між спробами обійти перешкоду - просто стоїмо на місці.
+    if (now < unit.pauseUntil) {
+      unit.isMoving = false; unit.vx = 0; unit.vy = 0;
       return;
     }
 
